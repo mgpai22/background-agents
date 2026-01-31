@@ -36,11 +36,15 @@ export async function POST(request: NextRequest) {
     // Get GitHub access token from session (added by next-auth callback)
     const githubToken = (session as { accessToken?: string }).accessToken;
 
-    // Add the token to the session creation request
-    // The control plane will encrypt it before storing
+    // Include user info so the control plane sets the correct owner
+    // This is critical for OAuth token lookup (anthropic:token:{userId})
     const sessionBody = {
       ...body,
       githubToken, // Plain token - control plane encrypts it
+      userId: session.user?.id,
+      githubLogin: session.user?.login,
+      githubName: session.user?.name,
+      githubEmail: session.user?.email,
     };
 
     const response = await controlPlaneFetch("/sessions", {
