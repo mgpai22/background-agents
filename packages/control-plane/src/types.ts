@@ -28,6 +28,9 @@ export interface Env {
   GITHUB_APP_PRIVATE_KEY?: string;
   GITHUB_APP_INSTALLATION_ID?: string;
 
+  // Anthropic OAuth
+  ANTHROPIC_CLIENT_ID?: string;
+
   // Variables
   DEPLOYMENT_NAME: string;
   WORKER_URL?: string; // Base URL for the worker (for callbacks)

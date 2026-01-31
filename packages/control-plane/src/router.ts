@@ -252,6 +252,23 @@ const routes: Route[] = [
     handler: handleUnarchiveSession,
   },
 
+  // Anthropic OAuth token management
+  {
+    method: "POST",
+    pattern: parsePattern("/internal/anthropic-token"),
+    handler: handleStoreAnthropicToken,
+  },
+  {
+    method: "GET",
+    pattern: parsePattern("/internal/anthropic-token/:userId"),
+    handler: handleGetAnthropicToken,
+  },
+  {
+    method: "DELETE",
+    pattern: parsePattern("/internal/anthropic-token/:userId"),
+    handler: handleDeleteAnthropicToken,
+  },
+
   // Repository management
   {
     method: "GET",
@@ -1030,5 +1047,132 @@ async function handleGetRepoMetadata(
   } catch (e) {
     console.error("Failed to get repo metadata:", e);
     return error("Failed to get metadata", 500);
+  }
+}
+
+// Anthropic OAuth token handlers
+
+/**
+ * Stored Anthropic token data in KV.
+ */
+interface StoredAnthropicToken {
+  accessTokenEncrypted: string;
+  refreshTokenEncrypted?: string;
+  expiresAt: number;
+  storedAt: number;
+}
+
+/**
+ * Store Anthropic OAuth tokens for a user.
+ * Tokens are encrypted using the TOKEN_ENCRYPTION_KEY before storage.
+ * When connected, the user's OAuth token is used instead of the shared API key.
+ */
+async function handleStoreAnthropicToken(
+  request: Request,
+  env: Env,
+  _match: RegExpMatchArray
+): Promise<Response> {
+  // Auth is handled by the HMAC middleware in handleRequest()
+  const body = (await request.json()) as {
+    userId: string;
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt: number;
+  };
+
+  if (!body.userId || !body.accessToken || !body.expiresAt) {
+    return error("userId, accessToken, and expiresAt are required");
+  }
+
+  if (!env.TOKEN_ENCRYPTION_KEY) {
+    console.error("TOKEN_ENCRYPTION_KEY not configured");
+    return error("Token encryption not configured", 500);
+  }
+
+  try {
+    // Encrypt the tokens
+    const accessTokenEncrypted = await encryptToken(body.accessToken, env.TOKEN_ENCRYPTION_KEY);
+    let refreshTokenEncrypted: string | undefined;
+    if (body.refreshToken) {
+      refreshTokenEncrypted = await encryptToken(body.refreshToken, env.TOKEN_ENCRYPTION_KEY);
+    }
+
+    // Store in KV
+    const tokenData: StoredAnthropicToken = {
+      accessTokenEncrypted,
+      refreshTokenEncrypted,
+      expiresAt: body.expiresAt,
+      storedAt: Date.now(),
+    };
+
+    await env.SESSION_INDEX.put(`anthropic:token:${body.userId}`, JSON.stringify(tokenData));
+
+    return json({ status: "stored", userId: body.userId });
+  } catch (e) {
+    console.error("Failed to store Anthropic token:", e);
+    return error("Failed to store token", 500);
+  }
+}
+
+/**
+ * Get Anthropic OAuth tokens for a user.
+ * Returns the encrypted tokens for use by the control plane/sandbox.
+ */
+async function handleGetAnthropicToken(
+  _request: Request,
+  env: Env,
+  match: RegExpMatchArray
+): Promise<Response> {
+  const userId = match.groups?.userId;
+  if (!userId) {
+    return error("userId is required");
+  }
+
+  try {
+    const tokenData = (await env.SESSION_INDEX.get(
+      `anthropic:token:${userId}`,
+      "json"
+    )) as StoredAnthropicToken | null;
+
+    if (!tokenData) {
+      return json({ connected: false });
+    }
+
+    // Check if token is expired
+    const isExpired = tokenData.expiresAt < Date.now();
+
+    return json({
+      connected: true,
+      expiresAt: tokenData.expiresAt,
+      isExpired,
+      hasRefreshToken: !!tokenData.refreshTokenEncrypted,
+      // Note: Don't return the encrypted tokens directly to clients
+      // They should be passed to sandboxes via the DO
+    });
+  } catch (e) {
+    console.error("Failed to get Anthropic token:", e);
+    return error("Failed to get token", 500);
+  }
+}
+
+/**
+ * Delete Anthropic OAuth tokens for a user (disconnect).
+ */
+async function handleDeleteAnthropicToken(
+  _request: Request,
+  env: Env,
+  match: RegExpMatchArray
+): Promise<Response> {
+  const userId = match.groups?.userId;
+  if (!userId) {
+    return error("userId is required");
+  }
+
+  try {
+    await env.SESSION_INDEX.delete(`anthropic:token:${userId}`);
+    return json({ status: "deleted", userId });
+  } catch (e) {
+    console.error("Failed to delete Anthropic token:", e);
+    return error("Failed to delete token", 500);
   }
 }

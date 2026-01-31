@@ -33,10 +33,14 @@ CREATE TABLE IF NOT EXISTS participants (
   github_email TEXT,                                -- For git commit attribution
   github_name TEXT,                                 -- Display name for git commits
   role TEXT NOT NULL DEFAULT 'member',              -- 'owner', 'member'
-  -- Token storage (AES-GCM encrypted)
+  -- GitHub Token storage (AES-GCM encrypted)
   github_access_token_encrypted TEXT,
   github_refresh_token_encrypted TEXT,
   github_token_expires_at INTEGER,                  -- Unix timestamp
+  -- Anthropic OAuth Token storage (AES-GCM encrypted)
+  anthropic_access_token_encrypted TEXT,
+  anthropic_refresh_token_encrypted TEXT,
+  anthropic_token_expires_at INTEGER,               -- Unix timestamp
   -- WebSocket authentication
   ws_auth_token TEXT,                               -- SHA-256 hash of WebSocket auth token
   ws_token_created_at INTEGER,                      -- When the token was generated
@@ -164,4 +168,9 @@ export function initSchema(sql: SqlStorage): void {
 
   // Migration: Add callback_context column to messages table for Slack follow-up notifications
   runMigration(sql, `ALTER TABLE messages ADD COLUMN callback_context TEXT`);
+
+  // Migration: Add Anthropic OAuth token columns to participants table
+  runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_access_token_encrypted TEXT`);
+  runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_refresh_token_encrypted TEXT`);
+  runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_token_expires_at INTEGER`);
 }

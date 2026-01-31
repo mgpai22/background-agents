@@ -43,6 +43,10 @@ export interface ParticipantRow {
   github_access_token_encrypted: string | null;
   github_refresh_token_encrypted: string | null;
   github_token_expires_at: number | null;
+  // Anthropic OAuth tokens (encrypted)
+  anthropic_access_token_encrypted: string | null;
+  anthropic_refresh_token_encrypted: string | null;
+  anthropic_token_expires_at: number | null;
   ws_auth_token: string | null; // SHA-256 hash of WebSocket auth token
   ws_token_created_at: number | null; // When the token was generated
   joined_at: number;
