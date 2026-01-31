@@ -11,6 +11,7 @@ import { DurableObject } from "cloudflare:workers";
 import { initSchema } from "./schema";
 import { generateId, decryptToken, hashToken } from "../auth/crypto";
 import { generateInstallationToken, getGitHubAppConfig } from "../auth/github-app";
+import { getValidAnthropicToken } from "../auth/anthropic";
 import { createModalClient } from "../sandbox/client";
 import { createPullRequest, getRepository } from "../auth/pr";
 import { generateBranchName, generateInternalToken } from "@open-inspect/shared";
@@ -1684,6 +1685,64 @@ export class SessionDO extends DurableObject<Env> {
         throw new Error("MODAL_WORKSPACE not configured");
       }
 
+      // Get the session owner's Anthropic OAuth token if available
+      let anthropicOAuthToken: string | undefined;
+      const ownerResult = this.sql.exec(
+        `SELECT user_id FROM participants WHERE role = 'owner' LIMIT 1`
+      );
+      const owners = ownerResult.toArray() as { user_id: string }[];
+      const ownerUserId = owners[0]?.user_id;
+
+      if (ownerUserId && this.env.SESSION_INDEX && this.env.TOKEN_ENCRYPTION_KEY) {
+        try {
+          const tokenData = (await this.env.SESSION_INDEX.get(
+            `anthropic:token:${ownerUserId}`,
+            "json"
+          )) as {
+            accessTokenEncrypted: string;
+            refreshTokenEncrypted?: string;
+            expiresAt: number;
+          } | null;
+
+          if (tokenData) {
+            const kvRef = this.env.SESSION_INDEX;
+            const encKey = this.env.TOKEN_ENCRYPTION_KEY;
+            const clientId = this.env.ANTHROPIC_CLIENT_ID || "";
+
+            anthropicOAuthToken = await getValidAnthropicToken(
+              tokenData.accessTokenEncrypted,
+              tokenData.refreshTokenEncrypted,
+              tokenData.expiresAt,
+              clientId,
+              encKey,
+              // Persist refreshed tokens back to KV
+              async (result) => {
+                if (result.success && result.accessToken && result.expiresAt) {
+                  await kvRef.put(
+                    `anthropic:token:${ownerUserId}`,
+                    JSON.stringify({
+                      accessTokenEncrypted: result.accessToken,
+                      refreshTokenEncrypted: result.refreshToken || tokenData.refreshTokenEncrypted,
+                      expiresAt: result.expiresAt,
+                      storedAt: Date.now(),
+                    })
+                  );
+                  console.log(`[DO] Refreshed Anthropic token for user ${ownerUserId}, new expiry: ${new Date(result.expiresAt).toISOString()}`);
+                }
+              }
+            ) || undefined;
+
+            if (anthropicOAuthToken) {
+              console.log(`[DO] Using Anthropic OAuth token for user ${ownerUserId}`);
+            } else {
+              console.log(`[DO] Anthropic token expired/refresh failed for user ${ownerUserId}`);
+            }
+          }
+        } catch (e) {
+          console.error("[DO] Failed to get Anthropic OAuth token:", e);
+        }
+      }
+
       // Call Modal to create the sandbox with the expected ID
       const modalClient = createModalClient(this.env.MODAL_API_SECRET, this.env.MODAL_WORKSPACE);
       const { provider, model } = extractProviderAndModel(session.model || DEFAULT_MODEL);
@@ -1699,6 +1758,7 @@ export class SessionDO extends DurableObject<Env> {
         gitUserEmail: undefined,
         provider,
         model,
+        anthropicOAuthToken, // Pass user's OAuth token if available
       });
 
       console.log("Modal sandbox created:", result);

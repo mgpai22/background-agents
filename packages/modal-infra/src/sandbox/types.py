@@ -118,3 +118,6 @@ class SessionConfig(BaseModel):
     provider: str = "anthropic"
     model: str = "claude-sonnet-4-5"
     git_user: GitUser | None = None
+    # User's Anthropic OAuth token (for user-specific API access)
+    # When set, the sandbox uses this token instead of the shared ANTHROPIC_API_KEY
+    anthropic_oauth_token: str | None = None

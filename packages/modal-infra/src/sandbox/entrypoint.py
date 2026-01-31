@@ -211,6 +211,27 @@ class SandboxSupervisor:
             "model": f"{provider}/{model}",
         }
 
+        # Check for user's Anthropic OAuth token (for user-specific API access)
+        # If available, use it instead of the shared ANTHROPIC_API_KEY
+        anthropic_oauth_token = os.environ.get("ANTHROPIC_OAUTH_TOKEN")
+        if anthropic_oauth_token:
+            print("[supervisor] Using user's Anthropic OAuth token for API access")
+            # Set the OAuth token as the API key for OpenCode
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_oauth_token
+
+            # Also write the auth.json file that OpenCode can use
+            opencode_data_dir = Path.home() / ".local" / "share" / "opencode"
+            opencode_data_dir.mkdir(parents=True, exist_ok=True)
+            auth_json_path = opencode_data_dir / "auth.json"
+            auth_data = {
+                "accessToken": anthropic_oauth_token,
+                "expiresAt": int(time.time() * 1000) + 3600000,  # 1 hour from now
+            }
+            auth_json_path.write_text(json.dumps(auth_data))
+            print(f"[supervisor] Wrote OAuth token to {auth_json_path}")
+        else:
+            print("[supervisor] No OAuth token, using shared ANTHROPIC_API_KEY")
+
         # Determine working directory - use repo path if cloned, otherwise /workspace
         workdir = self.workspace_path
         if self.repo_path.exists() and (self.repo_path / ".git").exists():

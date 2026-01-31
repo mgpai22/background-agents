@@ -31,6 +31,8 @@ export interface CreateSandboxRequest {
   gitUserEmail?: string;
   provider?: string;
   model?: string;
+  // Anthropic OAuth token (encrypted) for user-specific API access
+  anthropicOAuthToken?: string;
 }
 
 export interface CreateSandboxResponse {
@@ -156,6 +158,7 @@ export class ModalClient {
         git_user_email: request.gitUserEmail || null,
         provider: request.provider || "anthropic",
         model: request.model || "claude-sonnet-4-5",
+        anthropic_oauth_token: request.anthropicOAuthToken || null,
       }),
     });
 

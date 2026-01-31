@@ -39,6 +39,7 @@ async def create_sandbox(
     git_user_email: str | None = None,
     provider: str = "anthropic",
     model: str = "claude-sonnet-4-20250514",
+    anthropic_oauth_token: str | None = None,
 ) -> dict:
     """
     Create a new sandbox for a session.
@@ -56,6 +57,7 @@ async def create_sandbox(
         git_user_email: Git user email for commits
         provider: LLM provider (anthropic, openai)
         model: Model identifier
+        anthropic_oauth_token: Optional user's Anthropic OAuth token (encrypted)
 
     Returns:
         dict with sandbox_id and status
@@ -97,6 +99,7 @@ async def create_sandbox(
         provider=provider,
         model=model,
         git_user=git_user,
+        anthropic_oauth_token=anthropic_oauth_token,
     )
 
     config = SandboxConfig(
