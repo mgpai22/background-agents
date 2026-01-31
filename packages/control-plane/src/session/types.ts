@@ -94,6 +94,7 @@ export interface SandboxRow {
   git_sync_status: GitSyncStatus;
   last_heartbeat: number | null;
   last_activity: number | null; // Last activity timestamp for inactivity-based snapshot
+  auth_method: string | null;
   created_at: number;
 }
 

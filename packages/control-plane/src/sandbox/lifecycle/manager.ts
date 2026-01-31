@@ -70,6 +70,8 @@ export interface SandboxStorage {
   updateSandboxSnapshotImageId(sandboxId: string, imageId: string): void;
   /** Update last activity timestamp */
   updateSandboxLastActivity(timestamp: number): void;
+  /** Update sandbox auth method (oauth or api_key) */
+  updateSandboxAuthMethod(method: string): void;
   /** Increment circuit breaker failure count */
   incrementCircuitBreakerFailure(timestamp: number): void;
   /** Reset circuit breaker failure count */
@@ -305,6 +307,11 @@ export class SandboxLifecycleManager {
         }
       }
 
+      // Record and broadcast auth method
+      const authMethod = anthropicOAuthToken ? "oauth" : "api_key";
+      this.storage.updateSandboxAuthMethod(authMethod);
+      this.broadcaster.broadcast({ type: "auth_method", method: authMethod });
+
       // Create sandbox via provider
       const createConfig: CreateSandboxConfig = {
         sessionId,
@@ -414,6 +421,11 @@ export class SandboxLifecycleManager {
           });
         }
       }
+
+      // Record and broadcast auth method
+      const authMethod = anthropicOAuthToken ? "oauth" : "api_key";
+      this.storage.updateSandboxAuthMethod(authMethod);
+      this.broadcaster.broadcast({ type: "auth_method", method: authMethod });
 
       this.log.info("Restoring from snapshot", {
         event: "sandbox.restore",

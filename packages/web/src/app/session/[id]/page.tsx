@@ -374,6 +374,7 @@ function SessionContent({
           </div>
           <div className="flex items-center gap-4">
             <ConnectionStatus connected={connected} connecting={connecting} />
+            <AuthMethodBadge method={sessionState?.authMethod} />
             <SandboxStatus status={sessionState?.sandboxStatus} />
             <ParticipantsList participants={participants} />
           </div>
@@ -581,6 +582,22 @@ function ConnectionStatus({ connected, connecting }: { connected: boolean; conne
     <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-500">
       <span className="w-2 h-2 rounded-full bg-red-500" />
       Disconnected
+    </span>
+  );
+}
+
+function AuthMethodBadge({ method }: { method?: string | null }) {
+  if (!method) return null;
+  if (method === "oauth") {
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium">
+        Claude Code Subscription
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium">
+      Shared API Key
     </span>
   );
 }

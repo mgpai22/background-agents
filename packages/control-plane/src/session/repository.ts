@@ -339,6 +339,13 @@ export class SessionRepository {
     );
   }
 
+  updateSandboxAuthMethod(method: string): void {
+    this.sql.exec(
+      `UPDATE sandbox SET auth_method = ? WHERE id = (SELECT id FROM sandbox LIMIT 1)`,
+      method
+    );
+  }
+
   incrementCircuitBreakerFailure(timestamp: number): void {
     this.sql.exec(
       `UPDATE sandbox SET

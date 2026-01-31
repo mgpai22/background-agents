@@ -177,4 +177,7 @@ export function initSchema(sql: SqlStorage): void {
   runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_access_token_encrypted TEXT`);
   runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_refresh_token_encrypted TEXT`);
   runMigration(sql, `ALTER TABLE participants ADD COLUMN anthropic_token_expires_at INTEGER`);
+
+  // Migration: Add auth_method column to sandbox table for tracking OAuth vs API key usage
+  runMigration(sql, `ALTER TABLE sandbox ADD COLUMN auth_method TEXT`);
 }

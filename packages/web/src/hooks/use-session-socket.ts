@@ -50,6 +50,7 @@ interface SessionState {
   createdAt: number;
   model?: string;
   isProcessing: boolean;
+  authMethod?: string | null;
 }
 
 interface Participant {
@@ -123,6 +124,7 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
       participantId?: string;
       participant?: { participantId: string; name: string; avatar?: string };
       isProcessing?: boolean;
+      method?: string;
     }) => {
       switch (data.type) {
         case "subscribed":
@@ -262,6 +264,13 @@ export function useSessionSocket(sessionId: string): UseSessionSocketReturn {
           if (typeof data.isProcessing === "boolean") {
             const isProcessing = data.isProcessing;
             setSessionState((prev) => (prev ? { ...prev, isProcessing } : null));
+          }
+          break;
+
+        case "auth_method":
+          if (data.method) {
+            const method = data.method;
+            setSessionState((prev) => (prev ? { ...prev, authMethod: method } : null));
           }
           break;
 

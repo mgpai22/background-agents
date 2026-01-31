@@ -187,6 +187,7 @@ export class SessionDO extends DurableObject<Env> {
         this.repository.updateSandboxSnapshotImageId(sandboxId, imageId),
       updateSandboxLastActivity: (timestamp) =>
         this.repository.updateSandboxLastActivity(timestamp),
+      updateSandboxAuthMethod: (method) => this.repository.updateSandboxAuthMethod(method),
       incrementCircuitBreakerFailure: (timestamp) =>
         this.repository.incrementCircuitBreakerFailure(timestamp),
       resetCircuitBreaker: () => this.repository.resetCircuitBreaker(),
@@ -289,17 +290,12 @@ export class SessionDO extends DurableObject<Env> {
     const log = this.log;
 
     return async (): Promise<string | undefined> => {
-      const ownerResult = sql.exec(
-        `SELECT user_id FROM participants WHERE role = 'owner' LIMIT 1`
-      );
+      const ownerResult = sql.exec(`SELECT user_id FROM participants WHERE role = 'owner' LIMIT 1`);
       const owners = ownerResult.toArray() as { user_id: string }[];
       const ownerUserId = owners[0]?.user_id;
       if (!ownerUserId) return undefined;
 
-      const tokenData = (await kvRef.get(
-        `anthropic:token:${ownerUserId}`,
-        "json"
-      )) as {
+      const tokenData = (await kvRef.get(`anthropic:token:${ownerUserId}`, "json")) as {
         accessTokenEncrypted: string;
         refreshTokenEncrypted?: string;
         expiresAt: number;
@@ -307,30 +303,31 @@ export class SessionDO extends DurableObject<Env> {
 
       if (!tokenData) return undefined;
 
-      const token = await getValidAnthropicToken(
-        tokenData.accessTokenEncrypted,
-        tokenData.refreshTokenEncrypted,
-        tokenData.expiresAt,
-        clientId,
-        encKey,
-        async (result) => {
-          if (result.success && result.accessToken && result.expiresAt) {
-            await kvRef.put(
-              `anthropic:token:${ownerUserId}`,
-              JSON.stringify({
-                accessTokenEncrypted: result.accessToken,
-                refreshTokenEncrypted: result.refreshToken || tokenData.refreshTokenEncrypted,
-                expiresAt: result.expiresAt,
-                storedAt: Date.now(),
-              })
-            );
-            log.info("Refreshed Anthropic token", {
-              user_id: ownerUserId,
-              new_expiry: new Date(result.expiresAt).toISOString(),
-            });
+      const token =
+        (await getValidAnthropicToken(
+          tokenData.accessTokenEncrypted,
+          tokenData.refreshTokenEncrypted,
+          tokenData.expiresAt,
+          clientId,
+          encKey,
+          async (result) => {
+            if (result.success && result.accessToken && result.expiresAt) {
+              await kvRef.put(
+                `anthropic:token:${ownerUserId}`,
+                JSON.stringify({
+                  accessTokenEncrypted: result.accessToken,
+                  refreshTokenEncrypted: result.refreshToken || tokenData.refreshTokenEncrypted,
+                  expiresAt: result.expiresAt,
+                  storedAt: Date.now(),
+                })
+              );
+              log.info("Refreshed Anthropic token", {
+                user_id: ownerUserId,
+                new_expiry: new Date(result.expiresAt).toISOString(),
+              });
+            }
           }
-        }
-      ) || undefined;
+        )) || undefined;
 
       if (token) {
         log.info("Using Anthropic OAuth token", { user_id: ownerUserId });
@@ -759,7 +756,9 @@ export class SessionDO extends DurableObject<Env> {
         this.log.info("Pushed refreshed token to sandbox");
       }
     } catch (e) {
-      this.log.error("Proactive token refresh error", { error: e instanceof Error ? e : String(e) });
+      this.log.error("Proactive token refresh error", {
+        error: e instanceof Error ? e : String(e),
+      });
     }
   }
 
@@ -1589,6 +1588,7 @@ export class SessionDO extends DurableObject<Env> {
       messageCount,
       createdAt: session?.created_at ?? Date.now(),
       isProcessing,
+      authMethod: (sandbox?.auth_method as "oauth" | "api_key") ?? null,
     };
   }
 
@@ -1690,6 +1690,9 @@ export class SessionDO extends DurableObject<Env> {
       github_access_token_encrypted: null,
       github_refresh_token_encrypted: null,
       github_token_expires_at: null,
+      anthropic_access_token_encrypted: null,
+      anthropic_refresh_token_encrypted: null,
+      anthropic_token_expires_at: null,
       ws_auth_token: null,
       ws_token_created_at: null,
       joined_at: now,

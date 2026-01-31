@@ -64,6 +64,7 @@ function createMockSandbox(
     git_sync_status: "completed",
     last_heartbeat: Date.now() - 10000,
     last_activity: Date.now() - 30000,
+    auth_method: null,
     created_at: Date.now() - 60000,
     spawn_failure_count: 0,
     last_spawn_failure: 0,
@@ -124,6 +125,10 @@ function createMockStorage(
         sandbox.spawn_failure_count++;
         sandbox.last_spawn_failure = timestamp;
       }
+    }),
+    updateSandboxAuthMethod: vi.fn((method: string) => {
+      calls.push(`updateSandboxAuthMethod:${method}`);
+      if (sandbox) sandbox.auth_method = method;
     }),
     resetCircuitBreaker: vi.fn(() => {
       calls.push("resetCircuitBreaker");

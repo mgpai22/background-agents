@@ -122,7 +122,8 @@ export type ServerMessage =
   | { type: "sandbox_restored"; message: string }
   | { type: "sandbox_warning"; message: string }
   | { type: "session_status"; status: SessionStatus }
-  | { type: "processing_status"; isProcessing: boolean };
+  | { type: "processing_status"; isProcessing: boolean }
+  | { type: "auth_method"; method: "oauth" | "api_key" };
 
 // Sandbox events (from Modal)
 export type SandboxEvent =
@@ -209,6 +210,7 @@ export interface SessionState {
   messageCount: number;
   createdAt: number;
   isProcessing: boolean;
+  authMethod?: "oauth" | "api_key" | null;
 }
 
 // Participant presence
