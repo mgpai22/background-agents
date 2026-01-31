@@ -679,6 +679,88 @@ export class SessionDO extends DurableObject<Env> {
   async alarm(): Promise<void> {
     this.ensureInitialized();
     await this.lifecycleManager.handleAlarm();
+    await this.proactiveTokenRefresh();
+  }
+
+  /**
+   * Proactively refresh the Anthropic OAuth token if it's approaching expiry.
+   * If refreshed and a sandbox is running, push the new token to it.
+   */
+  private async proactiveTokenRefresh(): Promise<void> {
+    if (!this.env.SESSION_INDEX || !this.env.TOKEN_ENCRYPTION_KEY) return;
+
+    try {
+      const ownerResult = this.sql.exec(
+        `SELECT user_id FROM participants WHERE role = 'owner' LIMIT 1`
+      );
+      const owners = ownerResult.toArray() as { user_id: string }[];
+      const ownerUserId = owners[0]?.user_id;
+      if (!ownerUserId) return;
+
+      const tokenData = (await this.env.SESSION_INDEX.get(
+        `anthropic:token:${ownerUserId}`,
+        "json"
+      )) as {
+        accessTokenEncrypted: string;
+        refreshTokenEncrypted?: string;
+        expiresAt: number;
+      } | null;
+
+      if (!tokenData || !tokenData.refreshTokenEncrypted) return;
+
+      // Import inline to avoid circular deps
+      const { tokenNeedsRefresh, refreshAnthropicToken } = await import("../auth/anthropic");
+      const { decryptToken } = await import("../auth/crypto");
+
+      // Check if token needs refresh (within 5 min of expiry)
+      if (!tokenNeedsRefresh(tokenData.expiresAt)) return;
+
+      this.log.info("Proactive token refresh starting", { user_id: ownerUserId });
+
+      const clientId = this.env.ANTHROPIC_CLIENT_ID || "";
+      const encKey = this.env.TOKEN_ENCRYPTION_KEY;
+
+      const refreshResult = await refreshAnthropicToken(
+        tokenData.refreshTokenEncrypted,
+        clientId,
+        encKey
+      );
+
+      if (!refreshResult.success || !refreshResult.accessToken || !refreshResult.expiresAt) {
+        this.log.warn("Proactive token refresh failed", { error: refreshResult.error });
+        return;
+      }
+
+      // Persist refreshed tokens to KV
+      await this.env.SESSION_INDEX.put(
+        `anthropic:token:${ownerUserId}`,
+        JSON.stringify({
+          accessTokenEncrypted: refreshResult.accessToken,
+          refreshTokenEncrypted: refreshResult.refreshToken || tokenData.refreshTokenEncrypted,
+          expiresAt: refreshResult.expiresAt,
+          storedAt: Date.now(),
+        })
+      );
+
+      this.log.info("Proactive token refresh succeeded", {
+        user_id: ownerUserId,
+        new_expiry: new Date(refreshResult.expiresAt).toISOString(),
+      });
+
+      // If sandbox is running, push the new token to it
+      const sandboxWs = this.getSandboxWebSocket();
+      if (sandboxWs) {
+        const decryptedToken = await decryptToken(refreshResult.accessToken, encKey);
+        this.safeSend(sandboxWs, {
+          type: "update_token",
+          token: decryptedToken,
+          expiresAt: refreshResult.expiresAt,
+        });
+        this.log.info("Pushed refreshed token to sandbox");
+      }
+    } catch (e) {
+      this.log.error("Proactive token refresh error", { error: e instanceof Error ? e : String(e) });
+    }
   }
 
   /**

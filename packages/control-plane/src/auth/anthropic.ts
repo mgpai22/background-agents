@@ -65,6 +65,7 @@ export async function refreshAnthropicToken(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "User-Agent": "open-inspect-control-plane/1.0",
       },
       body: JSON.stringify({
         grant_type: "refresh_token",

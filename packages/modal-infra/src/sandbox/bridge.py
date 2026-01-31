@@ -476,6 +476,8 @@ class AgentBridge:
             self.git_sync_complete.set()
         elif cmd_type == "push":
             await self._handle_push(cmd)
+        elif cmd_type == "update_token":
+            await self._handle_update_token(cmd)
         else:
             self.log.debug("bridge.unknown_command", cmd_type=cmd_type)
         return None
@@ -1147,6 +1149,27 @@ class AgentBridge:
                     "branchName": branch_name,
                 }
             )
+
+    async def _handle_update_token(self, cmd: dict[str, Any]) -> None:
+        """Handle update_token command - write refreshed OAuth token to auth.json."""
+        token = cmd.get("token")
+        expires_at = cmd.get("expiresAt")
+        if not token:
+            self.log.warn("bridge.update_token_missing")
+            return
+
+        try:
+            opencode_data_dir = Path.home() / ".local" / "share" / "opencode"
+            opencode_data_dir.mkdir(parents=True, exist_ok=True)
+            auth_json_path = opencode_data_dir / "auth.json"
+            auth_data = {
+                "accessToken": token,
+                "expiresAt": expires_at or int(time.time() * 1000) + 3600000,
+            }
+            auth_json_path.write_text(json.dumps(auth_data))
+            self.log.info("bridge.token_updated")
+        except Exception as e:
+            self.log.error("bridge.update_token_error", exc=e)
 
     async def _configure_git_identity(self, user: GitUser) -> None:
         """Configure git identity for commit attribution."""
